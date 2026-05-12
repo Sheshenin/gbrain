@@ -55,6 +55,8 @@ export function dimsProviderOptions(
       // Most openai-compatible providers (Ollama, LM Studio, vLLM, LiteLLM)
       // do not expose a standard dimensions knob. Voyage's compat endpoint is
       // the exception: it accepts output_dimension and defaults to 1024 dims.
+      // OpenAI-compatible providers that proxy text-embedding-3-* (Timeweb, etc.)
+      // also support the dimensions parameter.
       if (VOYAGE_OUTPUT_DIMENSION_MODELS.has(modelId)) {
         return { openaiCompatible: { output_dimension: dims } };
       }
