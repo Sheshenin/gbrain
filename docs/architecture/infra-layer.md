@@ -17,9 +17,9 @@ CONTENT HASH (SHA-256 idempotency check — skip if unchanged)
 CHUNKING (3 strategies, configurable)
   ├── Recursive: 300-word chunks, 50-word overlap, 5-level delimiter hierarchy
   ├── Semantic: embed sentences, cosine similarity, Savitzky-Golay smoothing
-  └── LLM-guided: Claude Haiku identifies topic shifts in 128-word candidates
+  └── LLM-guided: configured chunking model identifies topic shifts in 128-word candidates
   ↓
-EMBEDDING (OpenAI text-embedding-3-large, 1536 dimensions)
+EMBEDDING (configured provider/model, dimensions pinned to brain config)
   → batch 100, exponential backoff, non-fatal if fails
   ↓
 DATABASE TRANSACTION (atomic: page + chunks + tags + version)
@@ -34,7 +34,7 @@ GBrain uses Reciprocal Rank Fusion (RRF) to merge vector and keyword search:
 ```
 User Query
   ↓
-EXPANSION (optional: Claude Haiku generates 2 alternative phrasings)
+EXPANSION (optional: configured expansion model generates alternative phrasings)
   ↓
   ├── VECTOR SEARCH (pgvector HNSW, cosine distance)
   │     → 2x limit results per query variant
@@ -62,13 +62,13 @@ TOP N RESULTS (default 20)
 | `src/core/import-file.ts` | importFromFile + importFromContent pipeline |
 | `src/core/sync.ts` | Git-based incremental change detection |
 | `src/core/markdown.ts` | YAML frontmatter + compiled_truth/timeline parsing |
-| `src/core/embedding.ts` | OpenAI embedding with batch, retry, backoff |
+| `src/core/embedding.ts` | Provider-routed embedding with batch, retry, backoff |
 | `src/core/chunkers/recursive.ts` | Base chunker (300w, 5-level delimiters) |
 | `src/core/chunkers/semantic.ts` | Embedding-based topic boundary detection |
-| `src/core/chunkers/llm.ts` | Claude Haiku guided chunking |
+| `src/core/chunkers/llm.ts` | LLM-guided chunking via configured model |
 | `src/core/search/hybrid.ts` | RRF merge of vector + keyword |
 | `src/core/search/dedup.ts` | 4-layer result deduplication |
-| `src/core/search/expansion.ts` | Multi-query expansion via Claude Haiku |
+| `src/core/search/expansion.ts` | Multi-query expansion via configured gateway model |
 | `src/core/storage.ts` | Pluggable storage (S3, Supabase, local) |
 | `src/core/operations.ts` | Contract-first operation definitions (31 ops) |
 | `src/schema.sql` | Full DDL (10 tables, RLS, tsvector, HNSW) |

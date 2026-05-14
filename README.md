@@ -551,7 +551,7 @@ Hybrid search: vector + keyword + RRF fusion + multi-query expansion + 4-layer d
 ```
 Query
   -> Intent classifier (entity? temporal? event? general?)
-  -> Multi-query expansion (Claude Haiku)
+  -> Multi-query expansion (configured expansion model)
   -> Vector search (HNSW cosine) + Keyword search (tsvector)
   -> RRF fusion: score = sum(1/(60 + rank))
   -> Cosine re-scoring + compiled truth boost
@@ -586,8 +586,8 @@ Question
   │
   ├─ SEARCH PIPELINE (every query)
   │    ├─ Intent classifier (entity / temporal / event / general — auto-routes)
-  │    ├─ Multi-query expansion (Haiku rephrases the question 3 ways)
-  │    ├─ Vector search (HNSW cosine over OpenAI embeddings)
+  │    ├─ Multi-query expansion (configured expansion model rephrases the question)
+  │    ├─ Vector search (HNSW cosine over the configured embedding provider)
   │    ├─ Keyword search (Postgres tsvector + websearch_to_tsquery)
   │    ├─ Source-aware ranking (curated dirs outrank chat/daily swamp at SQL layer)
   │    ├─ Hard-exclude (test/ archive/ attachments/ .raw/ filtered before retrieval)

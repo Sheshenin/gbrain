@@ -33,15 +33,30 @@ restart the shell or add the PATH export to the shell profile.
 
 ## Step 2: API Keys
 
-Ask the user for these:
+Ask the user for the credentials that match the providers they actually plan to run:
 
 ```bash
-export OPENAI_API_KEY=sk-...          # required for vector search
-export ANTHROPIC_API_KEY=sk-ant-...   # optional, improves search quality
+export OPENAI_API_KEY=sk-...          # one embedding option (default zero-config path)
+export ANTHROPIC_API_KEY=sk-ant-...   # one chat/expansion option
+export GOOGLE_GENERATIVE_AI_API_KEY=...   # optional Google path
+export OPENROUTER_API_KEY=...             # optional hosted fallback / routing path
 ```
 
-Save to shell profile or `.env`. Without OpenAI, keyword search still works.
-Without Anthropic, search works but skips query expansion.
+Save to shell profile or `.env`.
+
+- **Embeddings are provider-configurable.** OpenAI is the boring default, but any
+  configured embedding recipe works.
+- **Chat / expansion are provider-configurable.** gbrain routes them through the
+  model resolver + gateway, not through a hardcoded Anthropic-only path.
+- **Hermes-hosted installs:** if this repo is being driven from Hermes, gbrain can
+  derive chat/expansion provider defaults from `~/.hermes/config.yaml`
+  (primary `model.provider`, then `fallback_providers`). Do **not** hardcode
+  `GBRAIN_CHAT_MODEL` / `GBRAIN_EXPANSION_MODEL` unless you intentionally want a
+  per-repo override.
+
+Without any embedding credential, keyword search still works. Without any reachable
+chat / expansion provider, search still works but skips query expansion and other
+LLM-assisted steps.
 
 ## Step 3: Create the Brain
 

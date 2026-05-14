@@ -111,8 +111,9 @@ gbrain stats
 gbrain embed --stale
 ```
 
-If `OPENAI_API_KEY` is not set, embeddings can't be generated. Keyword search
-still works without embeddings, but hybrid/semantic search won't.
+If no embedding provider is configured or the configured provider can't be reached,
+embeddings can't be generated. Keyword search still works without embeddings, but
+hybrid/semantic search won't.
 
 ### 4c. End-to-End Test
 
@@ -156,13 +157,17 @@ gbrain stats
 
 **Expected:** Embedded chunk count matches (or is close to) total chunk count.
 
-**If zero or very low:** `OPENAI_API_KEY` may be missing or invalid. Check:
+**If zero or very low:** the configured embedding provider may be missing,
+invalid, or unreachable. Check what gbrain is actually configured to use first:
 
 ```bash
-echo $OPENAI_API_KEY | head -c 10
+gbrain config get embedding_model
+gbrain providers test --model "$(gbrain config get embedding_model)"
 ```
 
-If blank, set the key. Then:
+If that model points at OpenAI, then `OPENAI_API_KEY` is the first thing to check.
+If it points at another provider, verify that provider's credential/env instead.
+Then:
 
 ```bash
 gbrain embed --stale

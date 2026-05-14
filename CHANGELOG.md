@@ -2,6 +2,21 @@
 
 All notable changes to GBrain will be documented in this file.
 
+## [Unreleased]
+
+- **Hermes-derived provider defaults for chat / expansion.** When gbrain is hosted
+  under Hermes, the gateway now derives its primary provider from
+  `~/.hermes/config.yaml` (`model.provider`) and uses Hermes
+  `fallback_providers` as the secondary chain instead of hardcoding provider or
+  model ids inside gbrain. Explicit repo-local overrides like
+  `GBRAIN_CHAT_MODEL` / `GBRAIN_EXPANSION_MODEL` still win when intentionally
+  set.
+- **Docs scrubbed to match the provider-routed reality.** Operator-facing docs no
+  longer describe embeddings as OpenAI-only or query expansion as Anthropic /
+  Haiku-only in the current path. The project now documents provider-configurable
+  embeddings, provider-configurable expansion, and Hermes-derived defaults where
+  relevant.
+
 ## [0.33.0] - 2026-05-11
 
 **`gbrain recall` now answers "what changed since last time?" in one command, and thin-client installs stop silently lying about empty results.**
