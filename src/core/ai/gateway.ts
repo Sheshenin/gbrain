@@ -1159,8 +1159,42 @@ const ExpansionSchema = z.object({
   queries: z.array(z.string()).min(1).max(5),
 });
 
+function buildExpansionPrompt(query: string): string {
+  return [
+    'Rewrite the search query below into 3-4 different, related queries that would help find relevant documents.',
+    'Return ONLY the JSON object. Do NOT include the original query in the result.',
+    'Each rewrite should emphasize different aspects, synonyms, or framings.',
+    '',
+    `Query: ${query}`,
+  ].join('\n');
+}
+
+function extractExpansionQueriesFromText(text: string): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const jsonStart = trimmed.indexOf('{');
+  const jsonEnd = trimmed.lastIndexOf('}');
+  if (jsonStart === -1 || jsonEnd === -1 || jsonEnd <= jsonStart) return [];
+  try {
+    const parsed = JSON.parse(trimmed.slice(jsonStart, jsonEnd + 1));
+    const validated = ExpansionSchema.safeParse(parsed);
+    return validated.success ? validated.data.queries : [];
+  } catch {
+    return [];
+  }
+}
+
+function dedupeExpansionQueries(original: string, expansions: string[]): string[] {
+  const seen = new Set<string>();
+  return [original, ...expansions].filter(q => {
+    const k = q.toLowerCase().trim();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return !!q.trim();
+  });
+}
+
 /**
- * Expand a search query into up to 4 related queries.
  * Returns the original query PLUS expansions. On failure, returns just the original.
  * Caller is responsible for sanitizing the query (prompt-injection boundary stays in expansion.ts).
  */
@@ -1170,28 +1204,27 @@ export async function expand(query: string): Promise<string[]> {
 
   try {
     const { model, recipe, modelId } = await resolveExpansionProvider(getExpansionModel());
-    const result = await generateObject({
-      model,
-      schema: ExpansionSchema,
-      prompt: [
-        'Rewrite the search query below into 3-4 different, related queries that would help find relevant documents.',
-        'Return ONLY the JSON object. Do NOT include the original query in the result.',
-        'Each rewrite should emphasize different aspects, synonyms, or framings.',
-        '',
-        `Query: ${query}`,
-      ].join('\n'),
-    });
+    const prompt = buildExpansionPrompt(query);
+    let expansions: string[] = [];
 
-    const expansions = result.object?.queries ?? [];
-    // Deduplicate + include the original query
-    const seen = new Set<string>();
-    const all = [query, ...expansions].filter(q => {
-      const k = q.toLowerCase().trim();
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return !!q.trim();
-    });
-    return all;
+    try {
+      const result = await generateObject({
+        model,
+        schema: ExpansionSchema,
+        prompt,
+      });
+      expansions = result.object?.queries ?? [];
+    } catch (structuredErr) {
+      // Some OpenAI-compatible models (e.g. OpenRouter free tier) ignore or
+      // partially support structured outputs. Fallback to raw text + local JSON
+      // parse so expansion quality degrades gracefully instead of collapsing to
+      // [original-query] on every call.
+      const textResult = await generateText({ model, prompt });
+      expansions = extractExpansionQueriesFromText(textResult.text ?? '');
+      if (expansions.length === 0) throw structuredErr;
+    }
+
+    return dedupeExpansionQueries(query, expansions);
   } catch (err) {
     // Expansion is best-effort: on failure, fall back to the original query alone.
     const normalized = normalizeAIError(err, 'expand');
