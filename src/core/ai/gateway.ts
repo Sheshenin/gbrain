@@ -22,7 +22,10 @@
  */
 
 import { embed as aiEmbed, embedMany, generateObject, generateText } from 'ai';
-import { listRecipes } from './recipes/index.ts';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
+import { getRecipe, listRecipes } from './recipes/index.ts';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -63,6 +66,102 @@ const _modelCache = new Map<string, any>();
  * source-code typos while allowing config-time model selection of any id.
  */
 const _extendedModels: Map<string, Set<string>> = new Map();
+
+interface HermesProviderEntry {
+  provider?: string;
+  model?: string;
+  base_url?: string;
+}
+
+interface HermesProviderChain {
+  primary?: HermesProviderEntry;
+  fallbacks: HermesProviderEntry[];
+}
+
+function hermesConfigPath(): string {
+  const home = process.env.HERMES_HOME?.trim();
+  return join(home && home.length > 0 ? home : join(homedir(), '.hermes'), 'config.yaml');
+}
+
+function readHermesProviderChain(): HermesProviderChain {
+  const path = hermesConfigPath();
+  if (!existsSync(path)) return { fallbacks: [] };
+  try {
+    const raw = readFileSync(path, 'utf8');
+    const parsed = Bun.YAML.parse(raw) as {
+      model?: HermesProviderEntry;
+      fallback_providers?: HermesProviderEntry[];
+    };
+    return {
+      primary: parsed?.model,
+      fallbacks: Array.isArray(parsed?.fallback_providers) ? parsed.fallback_providers : [],
+    };
+  } catch {
+    return { fallbacks: [] };
+  }
+}
+
+function mapHermesProviderToRecipe(entry?: HermesProviderEntry): string | undefined {
+  const provider = entry?.provider?.trim().toLowerCase();
+  const baseUrl = entry?.base_url?.trim().toLowerCase();
+  if (provider && getRecipe(provider)) return provider;
+  if (baseUrl?.includes('api.timeweb.ai')) return 'timeweb';
+  if (baseUrl?.includes('openrouter.ai')) return 'openrouter';
+  if (baseUrl?.includes('api.openai.com')) return 'openai';
+  if (baseUrl?.includes('anthropic.com')) return 'anthropic';
+  if (baseUrl?.includes('googleapis.com') || baseUrl?.includes('generativelanguage')) return 'google';
+  if (provider === 'gemini') return 'google';
+  return undefined;
+}
+
+function defaultModelForTouchpoint(providerId: string, touchpoint: 'expansion' | 'chat'): string | undefined {
+  const models = getRecipe(providerId)?.touchpoints?.[touchpoint]?.models;
+  return Array.isArray(models) && models.length > 0 ? models[0] : undefined;
+}
+
+function deriveModelsFromHermes(config: AIGatewayConfig): Partial<AIGatewayConfig> {
+  const chain = readHermesProviderChain();
+  const primaryProvider = mapHermesProviderToRecipe(chain.primary);
+  const fallbackProvider = mapHermesProviderToRecipe(chain.fallbacks[0]);
+  const derived: Partial<AIGatewayConfig> = {};
+
+  if (!config.expansion_model && primaryProvider) {
+    const modelId = defaultModelForTouchpoint(primaryProvider, 'expansion');
+    if (modelId) derived.expansion_model = `${primaryProvider}:${modelId}`;
+  }
+  if (!config.chat_model && primaryProvider) {
+    const modelId = defaultModelForTouchpoint(primaryProvider, 'chat');
+    if (modelId) derived.chat_model = `${primaryProvider}:${modelId}`;
+  }
+  if ((!config.chat_fallback_chain || config.chat_fallback_chain.length === 0) && fallbackProvider) {
+    const modelId = defaultModelForTouchpoint(fallbackProvider, 'chat');
+    if (modelId) derived.chat_fallback_chain = [`${fallbackProvider}:${modelId}`];
+  }
+  return derived;
+}
+
+function expansionFallbackModelsFromHermes(): string[] {
+  const fallbackProvider = mapHermesProviderToRecipe(readHermesProviderChain().fallbacks[0]);
+  if (!fallbackProvider) return [];
+  const modelId = defaultModelForTouchpoint(fallbackProvider, 'expansion');
+  return modelId ? [`${fallbackProvider}:${modelId}`] : [];
+}
+
+async function hasModelOverride(
+  engine: BrainEngine,
+  configKey: string,
+  envVar: string,
+  tier: 'utility' | 'reasoning' | 'deep' | 'subagent',
+): Promise<boolean> {
+  const direct = await engine.getConfig(configKey);
+  if (direct && direct.trim()) return true;
+  const global = await engine.getConfig('models.default');
+  if (global && global.trim()) return true;
+  const tierVal = await engine.getConfig(`models.tier.${tier}`);
+  if (tierVal && tierVal.trim()) return true;
+  const env = process.env[envVar] ?? process.env.GBRAIN_MODEL;
+  return !!env?.trim();
+}
 
 /**
  * v0.31.12 — register a model id under its provider so `assertTouchpoint`
@@ -251,14 +350,14 @@ export function applyOpenAICompatConfig(
 
 /** Configure the gateway. Called by cli.ts#connectEngine. Clears cached models. */
 export function configureGateway(config: AIGatewayConfig): void {
+  const hermesDerived = deriveModelsFromHermes(config);
   _config = {
     embedding_model: config.embedding_model ?? DEFAULT_EMBEDDING_MODEL,
     embedding_dimensions: config.embedding_dimensions ?? DEFAULT_EMBEDDING_DIMENSIONS,
     embedding_multimodal_model: config.embedding_multimodal_model,
-    expansion_model: config.expansion_model ?? DEFAULT_EXPANSION_MODEL,
-    expansion_fallback_chain: config.expansion_fallback_chain,
-    chat_model: config.chat_model ?? DEFAULT_CHAT_MODEL,
-    chat_fallback_chain: config.chat_fallback_chain,
+    expansion_model: config.expansion_model ?? hermesDerived.expansion_model ?? DEFAULT_EXPANSION_MODEL,
+    chat_model: config.chat_model ?? hermesDerived.chat_model ?? DEFAULT_CHAT_MODEL,
+    chat_fallback_chain: config.chat_fallback_chain ?? hermesDerived.chat_fallback_chain,
     base_urls: config.base_urls,
     env: config.env,
   };
@@ -271,7 +370,6 @@ export function configureGateway(config: AIGatewayConfig): void {
     _config.embedding_model,
     _config.embedding_multimodal_model,
     _config.expansion_model,
-    ...(_config.expansion_fallback_chain ?? []),
     _config.chat_model,
     ...(_config.chat_fallback_chain ?? []),
   ]) {
@@ -301,21 +399,31 @@ export function configureGateway(config: AIGatewayConfig): void {
  */
 export async function reconfigureGatewayWithEngine(engine: BrainEngine): Promise<AIGatewayConfig> {
   const cfg = requireConfig();
-  // Resolve expansion (utility tier) and chat (reasoning tier). Embedding is
-  // intentionally NOT re-resolved here — switching embedding models invalidates
-  // the vector index. Out of scope per v0.31.12 plan ("Embedding tier knob").
-  const newExpansion = await resolveModel(engine, {
-    configKey: 'models.expansion',
-    envVar: 'GBRAIN_EXPANSION_MODEL',
-    tier: 'utility',
-    fallback: cfg.expansion_model ?? DEFAULT_EXPANSION_MODEL,
-  });
-  const newChat = await resolveModel(engine, {
-    configKey: 'models.chat',
-    envVar: 'GBRAIN_CHAT_MODEL',
-    tier: 'reasoning',
-    fallback: cfg.chat_model ?? DEFAULT_CHAT_MODEL,
-  });
+  // Resolve expansion (utility tier) and chat (reasoning tier) only when an
+  // explicit override exists in the brain config/env. Otherwise preserve the
+  // provider-derived bootstrap model selected during configureGateway().
+  // Embedding is intentionally NOT re-resolved here — switching embedding models
+  // invalidates the vector index. Out of scope per v0.31.12 plan ("Embedding tier knob").
+  const expansionOverride = await hasModelOverride(engine, 'models.expansion', 'GBRAIN_EXPANSION_MODEL', 'utility');
+  const chatOverride = await hasModelOverride(engine, 'models.chat', 'GBRAIN_CHAT_MODEL', 'reasoning');
+
+  const newExpansion = expansionOverride
+    ? await resolveModel(engine, {
+        configKey: 'models.expansion',
+        envVar: 'GBRAIN_EXPANSION_MODEL',
+        tier: 'utility',
+        fallback: cfg.expansion_model ?? DEFAULT_EXPANSION_MODEL,
+      })
+    : (cfg.expansion_model ?? DEFAULT_EXPANSION_MODEL);
+
+  const newChat = chatOverride
+    ? await resolveModel(engine, {
+        configKey: 'models.chat',
+        envVar: 'GBRAIN_CHAT_MODEL',
+        tier: 'reasoning',
+        fallback: cfg.chat_model ?? DEFAULT_CHAT_MODEL,
+      })
+    : (cfg.chat_model ?? DEFAULT_CHAT_MODEL);
 
   // Resolved values are bare model ids (e.g. `claude-sonnet-4-6`) — prepend
   // the existing provider prefix from cfg so the gateway keeps routing to
@@ -332,7 +440,6 @@ export async function reconfigureGatewayWithEngine(engine: BrainEngine): Promise
     _config.embedding_model,
     _config.embedding_multimodal_model,
     _config.expansion_model,
-    ...(_config.expansion_fallback_chain ?? []),
     _config.chat_model,
     ...(_config.chat_fallback_chain ?? []),
   ]) {
@@ -460,10 +567,6 @@ export function getMultimodalModel(): string | undefined {
 
 export function getExpansionModel(): string {
   return requireConfig().expansion_model ?? DEFAULT_EXPANSION_MODEL;
-}
-
-export function getExpansionFallbackChain(): string[] {
-  return requireConfig().expansion_fallback_chain ?? [];
 }
 
 export function getChatModel(): string {
@@ -1210,7 +1313,7 @@ export async function expand(query: string): Promise<string[]> {
 
   let candidates: string[] = [];
   try {
-    candidates = [getExpansionModel(), ...getExpansionFallbackChain()].filter(Boolean);
+    candidates = [getExpansionModel(), ...expansionFallbackModelsFromHermes()].filter(Boolean);
   } catch {
     return [query];
   }

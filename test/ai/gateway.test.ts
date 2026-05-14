@@ -1,4 +1,7 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
+import { mkdtempSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import {
   configureGateway,
   reconfigureGatewayWithEngine,
@@ -27,11 +30,40 @@ describe('gateway configuration', () => {
     expect(getExpansionModel()).toBe('anthropic:claude-haiku-4-5-20251001');
   });
 
-  test('defaults preserve v0.13 OpenAI behavior', () => {
-    configureGateway({ env: {} });
-    expect(getEmbeddingModel()).toBe('openai:text-embedding-3-large');
-    expect(getEmbeddingDimensions()).toBe(1536);
-    expect(getExpansionModel()).toBe('anthropic:claude-haiku-4-5-20251001');
+  test('defaults preserve v0.13 OpenAI behavior when Hermes config is unavailable', () => {
+    const prevHermesHome = process.env.HERMES_HOME;
+    process.env.HERMES_HOME = join(tmpdir(), `hermes-missing-${Date.now()}`);
+    try {
+      configureGateway({ env: {} });
+      expect(getEmbeddingModel()).toBe('openai:text-embedding-3-large');
+      expect(getEmbeddingDimensions()).toBe(1536);
+      expect(getExpansionModel()).toBe('anthropic:claude-haiku-4-5-20251001');
+    } finally {
+      if (prevHermesHome === undefined) delete process.env.HERMES_HOME;
+      else process.env.HERMES_HOME = prevHermesHome;
+    }
+  });
+
+  test('configureGateway derives provider defaults from Hermes config', () => {
+    const prevHermesHome = process.env.HERMES_HOME;
+    const hermesHome = mkdtempSync(join(tmpdir(), 'hermes-test-'));
+    writeFileSync(join(hermesHome, 'config.yaml'), [
+      'model:',
+      '  provider: openai-codex',
+      '  default: gpt-5.4-mini',
+      '  base_url: https://api.timeweb.ai/v1',
+      'fallback_providers:',
+      '  - provider: openrouter',
+      '    model: openrouter/free',
+    ].join('\n'));
+    process.env.HERMES_HOME = hermesHome;
+    try {
+      configureGateway({ env: {} });
+      expect(getExpansionModel()).toBe('timeweb:openai/gpt-4o-mini');
+    } finally {
+      if (prevHermesHome === undefined) delete process.env.HERMES_HOME;
+      else process.env.HERMES_HOME = prevHermesHome;
+    }
   });
 });
 
