@@ -16,9 +16,13 @@ export const timeweb: Recipe = {
     optional: ['TIMEWEB_BASE_URL'],
     setup_url: 'https://timeweb.cloud/docs/ai',
   },
+  aliases: {
+    'text-embedding-3-large': 'openai/text-embedding-3-large',
+    'text-embedding-3-small': 'openai/text-embedding-3-small',
+  },
   touchpoints: {
     embedding: {
-      models: ['text-embedding-3-large', 'text-embedding-3-small'],
+      models: ['openai/text-embedding-3-large', 'openai/text-embedding-3-small'],
       default_dims: 1536,
       dims_options: [256, 512, 1024, 1536, 3072],
       cost_per_1m_tokens_usd: 0.13,
@@ -40,6 +44,9 @@ export const timeweb: Recipe = {
       cost_per_1m_output_usd: 0.60,
       price_last_verified: '2026-05-13',
     },
+  },
+  resolveOpenAICompatConfig() {
+    return { baseURL: 'https://api.timeweb.ai/v1' };
   },
   setup_hint: 'Set TIMEWEB_API_KEY from your Timeweb AI Cloud account.',
 };

@@ -14,6 +14,7 @@ import {
 import { parseModelId, resolveRecipe } from '../../src/core/ai/model-resolver.ts';
 import { dimsProviderOptions } from '../../src/core/ai/dims.ts';
 import { AIConfigError } from '../../src/core/ai/errors.ts';
+import { timeweb } from '../../src/core/ai/recipes/timeweb.ts';
 
 describe('gateway configuration', () => {
   beforeEach(() => resetGateway());
@@ -188,6 +189,12 @@ describe('model-resolver', () => {
     expect(parsed.modelId).toBe('text-embedding-3-large');
   });
 
+  test('resolveRecipe applies Timeweb embedding aliases', () => {
+    const { recipe, parsed } = resolveRecipe('timeweb:text-embedding-3-large');
+    expect(recipe.id).toBe('timeweb');
+    expect(parsed.modelId).toBe('openai/text-embedding-3-large');
+  });
+
   test('resolveRecipe throws AIConfigError for unknown provider', () => {
     expect(() => resolveRecipe('cohere:embed-v3')).toThrow(AIConfigError);
   });
@@ -196,6 +203,11 @@ describe('model-resolver', () => {
 describe('dims.dimsProviderOptions', () => {
   test('OpenAI text-embedding-3 returns dimensions param', () => {
     const opts = dimsProviderOptions('native-openai', 'text-embedding-3-large', 1536);
+    expect(opts).toEqual({ openai: { dimensions: 1536 } });
+  });
+
+  test('OpenAI canonical openai/text-embedding-3 returns dimensions param', () => {
+    const opts = dimsProviderOptions('native-openai', 'openai/text-embedding-3-large', 1536);
     expect(opts).toEqual({ openai: { dimensions: 1536 } });
   });
 
@@ -227,5 +239,16 @@ describe('dims.dimsProviderOptions', () => {
   test('Voyage model without flexible dimensions returns undefined', () => {
     const opts = dimsProviderOptions('openai-compatible', 'voyage-3-lite', 1024);
     expect(opts).toBeUndefined();
+  });
+
+  test('openai-compatible canonical openai/text-embedding-3 returns dimensions param', () => {
+    const opts = dimsProviderOptions('openai-compatible', 'openai/text-embedding-3-large', 1536);
+    expect(opts).toEqual({ openaiCompatible: { dimensions: 1536 } });
+  });
+});
+
+describe('timeweb recipe', () => {
+  test('exposes stable OpenAI-compatible baseURL', () => {
+    expect(timeweb.resolveOpenAICompatConfig?.({})).toEqual({ baseURL: 'https://api.timeweb.ai/v1' });
   });
 });

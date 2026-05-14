@@ -37,7 +37,7 @@ export function dimsProviderOptions(
   switch (implementation) {
     case 'native-openai': {
       // text-embedding-3-* supports dimensions; text-embedding-ada-002 does not.
-      if (modelId.startsWith('text-embedding-3')) {
+      if (modelId.startsWith('text-embedding-3') || modelId.startsWith('openai/text-embedding-3')) {
         return { openai: { dimensions: dims } };
       }
       return undefined;
@@ -65,7 +65,7 @@ export function dimsProviderOptions(
       // endpoint). The provider defaults to the model's native size (3072
       // for `-large`, 1536 for `-small`); without `dimensions`, brains
       // configured for a smaller width (e.g. 1536) hard-fail at first embed.
-      if (modelId.startsWith('text-embedding-3')) {
+      if (modelId.startsWith('text-embedding-3') || modelId.startsWith('openai/text-embedding-3')) {
         return { openaiCompatible: { dimensions: dims } };
       }
       // DashScope text-embedding-v3 (Matryoshka 64-1024) and Zhipu
