@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
 import {
   configureGateway,
+  reconfigureGatewayWithEngine,
   resetGateway,
   isAvailable,
   getEmbeddingModel,
@@ -92,6 +93,36 @@ describe('gateway.isAvailable (silent-drop regression surface)', () => {
       env: { ANTHROPIC_API_KEY: 'fake' },
     });
     expect(isAvailable('expansion')).toBe(true);
+  });
+
+  test('reconfigureGatewayWithEngine honors GBRAIN_EXPANSION_MODEL and GBRAIN_CHAT_MODEL', async () => {
+    const prevExpansion = process.env.GBRAIN_EXPANSION_MODEL;
+    const prevChat = process.env.GBRAIN_CHAT_MODEL;
+    process.env.GBRAIN_EXPANSION_MODEL = 'openrouter:openrouter/free';
+    process.env.GBRAIN_CHAT_MODEL = 'openrouter:openrouter/free';
+    try {
+      configureGateway({
+        expansion_model: 'openrouter:openrouter/free',
+        chat_model: 'openrouter:openrouter/free',
+        env: {
+          OPENROUTER_API_KEY: 'fake-openrouter',
+          GBRAIN_EXPANSION_MODEL: 'openrouter:openrouter/free',
+          GBRAIN_CHAT_MODEL: 'openrouter:openrouter/free',
+        },
+      });
+      const engine = {
+        getConfig: async (_key: string) => null,
+      };
+      const cfg = await reconfigureGatewayWithEngine(engine as never);
+      expect(cfg.expansion_model).toBe('openrouter:openrouter/free');
+      expect(cfg.chat_model).toBe('openrouter:openrouter/free');
+      expect(getExpansionModel()).toBe('openrouter:openrouter/free');
+    } finally {
+      if (prevExpansion === undefined) delete process.env.GBRAIN_EXPANSION_MODEL;
+      else process.env.GBRAIN_EXPANSION_MODEL = prevExpansion;
+      if (prevChat === undefined) delete process.env.GBRAIN_CHAT_MODEL;
+      else process.env.GBRAIN_CHAT_MODEL = prevChat;
+    }
   });
 });
 
