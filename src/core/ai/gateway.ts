@@ -256,6 +256,7 @@ export function configureGateway(config: AIGatewayConfig): void {
     embedding_dimensions: config.embedding_dimensions ?? DEFAULT_EMBEDDING_DIMENSIONS,
     embedding_multimodal_model: config.embedding_multimodal_model,
     expansion_model: config.expansion_model ?? DEFAULT_EXPANSION_MODEL,
+    expansion_fallback_chain: config.expansion_fallback_chain,
     chat_model: config.chat_model ?? DEFAULT_CHAT_MODEL,
     chat_fallback_chain: config.chat_fallback_chain,
     base_urls: config.base_urls,
@@ -270,6 +271,7 @@ export function configureGateway(config: AIGatewayConfig): void {
     _config.embedding_model,
     _config.embedding_multimodal_model,
     _config.expansion_model,
+    ...(_config.expansion_fallback_chain ?? []),
     _config.chat_model,
     ...(_config.chat_fallback_chain ?? []),
   ]) {
@@ -330,6 +332,7 @@ export async function reconfigureGatewayWithEngine(engine: BrainEngine): Promise
     _config.embedding_model,
     _config.embedding_multimodal_model,
     _config.expansion_model,
+    ...(_config.expansion_fallback_chain ?? []),
     _config.chat_model,
     ...(_config.chat_fallback_chain ?? []),
   ]) {
@@ -457,6 +460,10 @@ export function getMultimodalModel(): string | undefined {
 
 export function getExpansionModel(): string {
   return requireConfig().expansion_model ?? DEFAULT_EXPANSION_MODEL;
+}
+
+export function getExpansionFallbackChain(): string[] {
+  return requireConfig().expansion_fallback_chain ?? [];
 }
 
 export function getChatModel(): string {
@@ -1200,39 +1207,52 @@ function dedupeExpansionQueries(original: string, expansions: string[]): string[
  */
 export async function expand(query: string): Promise<string[]> {
   if (!query || !query.trim()) return [query];
-  if (!isAvailable('expansion')) return [query];
 
+  let candidates: string[] = [];
   try {
-    const { model, recipe, modelId } = await resolveExpansionProvider(getExpansionModel());
-    const prompt = buildExpansionPrompt(query);
-    let expansions: string[] = [];
-
-    try {
-      const result = await generateObject({
-        model,
-        schema: ExpansionSchema,
-        prompt,
-      });
-      expansions = result.object?.queries ?? [];
-    } catch (structuredErr) {
-      // Some OpenAI-compatible models (e.g. OpenRouter free tier) ignore or
-      // partially support structured outputs. Fallback to raw text + local JSON
-      // parse so expansion quality degrades gracefully instead of collapsing to
-      // [original-query] on every call.
-      const textResult = await generateText({ model, prompt });
-      expansions = extractExpansionQueriesFromText(textResult.text ?? '');
-      if (expansions.length === 0) throw structuredErr;
-    }
-
-    return dedupeExpansionQueries(query, expansions);
-  } catch (err) {
-    // Expansion is best-effort: on failure, fall back to the original query alone.
-    const normalized = normalizeAIError(err, 'expand');
-    if (normalized instanceof AIConfigError) {
-      console.warn(`[ai.gateway] expansion disabled: ${normalized.message}`);
-    }
+    candidates = [getExpansionModel(), ...getExpansionFallbackChain()].filter(Boolean);
+  } catch {
     return [query];
   }
+  if (candidates.length === 0) return [query];
+
+  const prompt = buildExpansionPrompt(query);
+  let lastErr: unknown = null;
+
+  for (const candidate of candidates) {
+    try {
+      const { model } = await resolveExpansionProvider(candidate);
+      let expansions: string[] = [];
+
+      try {
+        const result = await generateObject({
+          model,
+          schema: ExpansionSchema,
+          prompt,
+        });
+        expansions = result.object?.queries ?? [];
+      } catch (structuredErr) {
+        // Some OpenAI-compatible models (e.g. OpenRouter free tier) ignore or
+        // partially support structured outputs. Fallback to raw text + local JSON
+        // parse so expansion quality degrades gracefully instead of collapsing to
+        // [original-query] on every call.
+        const textResult = await generateText({ model, prompt });
+        expansions = extractExpansionQueriesFromText(textResult.text ?? '');
+        if (expansions.length === 0) throw structuredErr;
+      }
+
+      return dedupeExpansionQueries(query, expansions);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  // Expansion is best-effort: on failure, fall back to the original query alone.
+  const normalized = normalizeAIError(lastErr, 'expand');
+  if (normalized instanceof AIConfigError) {
+    console.warn(`[ai.gateway] expansion disabled: ${normalized.message}`);
+  }
+  return [query];
 }
 
 // ---- OCR (v0.27.1, cherry-1) ----

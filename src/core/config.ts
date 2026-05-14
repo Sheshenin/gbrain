@@ -35,6 +35,8 @@ export interface GBrainConfig {
   embedding_model?: string;
   embedding_dimensions?: number;
   expansion_model?: string;
+  /** Optional fallback chain for expansion/query-rewrite. */
+  expansion_fallback_chain?: string[];
   /**
    * Default chat model for `gateway.chat()` callers (v0.27+).
    * Default: "anthropic:claude-sonnet-4-6" (dateless per Anthropic's v0.31.12+ model-ID format).
@@ -155,6 +157,9 @@ export function loadConfig(): GBrainConfig | null {
     ...(process.env.GBRAIN_EMBEDDING_MODEL ? { embedding_model: process.env.GBRAIN_EMBEDDING_MODEL } : {}),
     ...(process.env.GBRAIN_EMBEDDING_DIMENSIONS ? { embedding_dimensions: parseInt(process.env.GBRAIN_EMBEDDING_DIMENSIONS, 10) } : {}),
     ...(process.env.GBRAIN_EXPANSION_MODEL ? { expansion_model: process.env.GBRAIN_EXPANSION_MODEL } : {}),
+    ...(process.env.GBRAIN_EXPANSION_FALLBACK_CHAIN
+      ? { expansion_fallback_chain: process.env.GBRAIN_EXPANSION_FALLBACK_CHAIN.split(',').map(s => s.trim()).filter(Boolean) }
+      : {}),
     ...(process.env.GBRAIN_CHAT_MODEL ? { chat_model: process.env.GBRAIN_CHAT_MODEL } : {}),
     ...(process.env.GBRAIN_CHAT_FALLBACK_CHAIN
       ? { chat_fallback_chain: process.env.GBRAIN_CHAT_FALLBACK_CHAIN.split(',').map(s => s.trim()).filter(Boolean) }

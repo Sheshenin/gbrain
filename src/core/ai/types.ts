@@ -249,6 +249,8 @@ export interface AIGatewayConfig {
   embedding_multimodal_model?: string;
   /** Current expansion model as "provider:modelId". */
   expansion_model?: string;
+  /** Optional fallback chain for expansion/query-rewrite. */
+  expansion_fallback_chain?: string[];
   /** Default chat model for `gateway.chat()` callers (subagent default). */
   chat_model?: string;
   /**
