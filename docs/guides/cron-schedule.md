@@ -25,7 +25,7 @@ fixed. You wake up and the brain is smarter than when you went to sleep.
 | Daily AM | Morning briefing | Search calendar attendees, deal status, active threads | [briefing skill](../../skills/briefing/SKILL.md) |
 | Weekly | Brain maintenance | `gbrain doctor`, embed stale, orphan detection | [maintain skill](../../skills/maintain/SKILL.md) |
 | Nightly | Dream cycle | Entity sweep, enrich thin spots, fix citations | See below |
-| Nightly | Document mirror pipeline | Extract Google Drive/local documents, import Markdown mirror, embed stale chunks | [Hermes second brain](../deployments/hermes-second-brain.md) |
+| Nightly | Document mirror + daily-inbox pipeline | Extract Google Drive/local documents, route daily communications, import Markdown mirrors, embed stale chunks | [Hermes second brain](../deployments/hermes-second-brain.md) |
 
 ## Implementation: Setting Up Cron Jobs
 
@@ -48,14 +48,16 @@ fixed. You wake up and the brain is smarter than when you went to sleep.
 # Dream cycle — nightly at 2 AM
 0 2 * * * /path/to/dream-cycle.sh
 
-# Hermes document mirror pipeline — daily at 6 AM on the server
+# Hermes document mirror + daily-inbox pipeline — daily at 6 AM on the server
 0 6 * * * /root/.hermes/scripts/second_brain_librarian_worker.sh >> /second-brain/logs/librarian_cron_stdout.log 2>> /second-brain/logs/librarian_cron_stderr.log
 ```
 
-The Hermes document mirror pipeline is server-side and read-only toward Google
-Drive. It does not require the user's Mac to be awake. It writes extracted
-Markdown to `/second-brain/texts`, refreshes `/second-brain/gbrain-import`, runs
-`gbrain import ... --no-embed`, and then runs `gbrain embed --stale`.
+The Hermes pipeline is server-side and read-only toward Google Drive. It does
+not require the user's Mac to be awake. It writes extracted Markdown to
+`/second-brain/texts`, routes `daily-inbox` into `agent-context`, refreshes
+`/second-brain/gbrain-import`, runs `gbrain import ... --no-embed` for Google
+Drive, Telegram, daily-inbox, and agent-context, and then runs
+`gbrain embed --stale`.
 
 ### Quiet Hours Gate (MANDATORY)
 
@@ -97,11 +99,12 @@ morning briefing. Zero config change needed.
 
 The most important cron job. Runs while you sleep.
 
-Do not confuse the dream cycle with deterministic document ingestion. The dream
-cycle maintains memories, entities, citations, and reflections. The document
-mirror pipeline turns external documents into indexed Markdown. Production
-deployments can run both; they should stay separate so source extraction is
-idempotent and debuggable.
+Do not confuse the dream cycle with deterministic document ingestion and
+daily-inbox routing. The dream cycle maintains memories, entities, citations,
+and reflections. The document mirror pipeline turns external documents into
+indexed Markdown. The daily-inbox router turns raw daily communications into
+auditable agent-context pages. Production deployments can run all three; they
+should stay separate so extraction and routing are idempotent and debuggable.
 
 ### What It Does
 
@@ -199,9 +202,10 @@ echo "Dream cycle complete at $(date)"
    Verify output went to `/tmp/cron-held/`, not to messaging.
 2. **Dream cycle:** Run the dream cycle manually. Check that thin entity pages
    got enriched and broken citations were fixed.
-3. **Document mirror pipeline:** On Hermes, run the librarian worker or a small
-   `librarian_v0.py --process-limit N` batch. Verify `.md` and `.meta.json`
-   files appear under `/second-brain/texts`, then run `gbrain stats`.
+3. **Document mirror + daily-inbox pipeline:** On Hermes, run the librarian
+   worker or targeted phases. Verify `.md` and `.meta.json` files appear under
+   `/second-brain/texts`, `daily_inbox_router.py` writes routed pages under
+   `/second-brain/texts/agent-context`, then run `gbrain stats`.
 4. **Email collector cron:** Wait 30 minutes. Check `data/digests/` for new digest.
 5. **Morning briefing:** Check that held messages appear in the briefing.
 6. **Health check:** Run `gbrain doctor --json`. All checks should pass.

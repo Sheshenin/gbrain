@@ -96,9 +96,10 @@ server-side Markdown mirror documented in
 ```
 
 The worker inventories Google Drive, downloads/exports changed files, extracts
-text into `/second-brain/texts/google-drive`, mirrors those Markdown files into
-`/second-brain/gbrain-import/google-drive`, runs `gbrain import ... --no-embed`,
-and then runs `gbrain embed --stale`.
+text into `/second-brain/texts/google-drive`, routes raw daily communications
+from `/second-brain/texts/daily-inbox` into `/second-brain/texts/agent-context`,
+mirrors those Markdown files into `/second-brain/gbrain-import/*`, runs
+`gbrain import ... --no-embed`, and then runs `gbrain embed --stale`.
 
 For a manual import-only refresh on Hermes:
 
@@ -106,12 +107,21 @@ For a manual import-only refresh on Hermes:
 /second-brain/scripts/make_gbrain_import_mirror.py
 gbrain import /second-brain/gbrain-import/google-drive --no-embed
 gbrain import /second-brain/gbrain-import/telegram --no-embed
+gbrain import /second-brain/gbrain-import/daily-inbox --no-embed
+gbrain import /second-brain/gbrain-import/agent-context --no-embed
 gbrain embed --stale
 ```
 
 Run the manual commands with the same environment the worker uses
 (`/root/.hermes/.env` and `/root/.gbrain/.env`) so embedding provider credentials
 are available.
+
+To add daily communications manually:
+
+```bash
+/second-brain/scripts/append_daily_inbox.py --kind thought --title "Idea" --text "..."
+printf '%s\n' "<email summary>" | /second-brain/scripts/daily_mail_review_to_inbox.py --title "Daily email review"
+```
 
 ## Step 4.5: Wire the Knowledge Graph
 

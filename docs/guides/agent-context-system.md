@@ -5,6 +5,7 @@ Goal: build an agent context layer on top of gbrain for projects, people, compan
 ## Directory Structure
 
 ```text
+daily-inbox/
 profile/
 projects/
 people/
@@ -19,6 +20,7 @@ agent-context/
 
 | Path | Purpose |
 |---|---|
+| `daily-inbox/` | Raw daily input: Zoom summaries, Telegram/email signals, candidate tasks, and thoughts before routing |
 | `profile/` | Stable user preferences, writing style, permanent operating rules |
 | `projects/` | Active projects, status, decisions, related people/docs/tasks |
 | `people/` | People profiles, relationship history, related projects/docs |
@@ -29,6 +31,10 @@ agent-context/
 | `agent-context/` | Agent instructions, indexes, briefing templates, commit templates |
 
 ## Write Rules
+
+Raw daily communication does not go directly into final project/person/company
+pages. First write it to `daily-inbox`, then let the nightly router create
+auditable routed pages.
 
 Every context write must include:
 
@@ -43,6 +49,64 @@ Every context write must include:
 Do not write everything. Commit only stable facts, decisions, changed statuses, useful summaries, and next actions.
 
 Do not paste large documents into project/person pages. Source documents stay in `resources/` or the Google Drive text mirror; project pages contain conclusions and links.
+
+## Daily Inbox
+
+`daily-inbox` is the intake layer for meaningful daily communications:
+
+```text
+/second-brain/texts/daily-inbox/YYYY-MM-DD.md
+```
+
+Use it for:
+
+- Zoom summaries.
+- Telegram/email items that look like tasks, commitments, decisions, project
+  status changes, or client/company signals.
+- Andrey's thoughts when he asks to add them to daily-inbox.
+
+Do not use it for routine chatter or duplicate FYIs.
+
+Capture command:
+
+```bash
+/second-brain/scripts/append_daily_inbox.py --kind <zoom|telegram|email|thought|task|note> --title "<title>" --text "<text>"
+```
+
+Email-review bridge:
+
+```bash
+printf '%s\n' "<summary>" | /second-brain/scripts/daily_mail_review_to_inbox.py --title "Daily email review"
+```
+
+Nightly routing command:
+
+```bash
+/second-brain/scripts/daily_inbox_router.py
+```
+
+Router output:
+
+```text
+/second-brain/texts/agent-context/worklog/YYYY-MM-DD.md
+/second-brain/texts/agent-context/tasks/YYYY-MM-DD.md
+/second-brain/texts/agent-context/projects/<project>/YYYY-MM-DD.md
+/second-brain/texts/agent-context/people/<person>/YYYY-MM-DD.md
+/second-brain/texts/agent-context/companies/<company>/YYYY-MM-DD.md
+```
+
+Routing metadata fields:
+
+```text
+project:
+person:
+company:
+client:
+source:
+```
+
+If metadata is unknown, omit it. The item still lands in `worklog`; guessing the
+wrong project/person/company is worse than under-routing.
 
 ## Core Commands
 
@@ -137,6 +201,10 @@ After meaningful work, write:
 - New decisions
 - New next actions
 - Links to produced docs/scripts/logs
+
+For raw communications or loose thoughts, prefer `daily-inbox` over
+`session_commit`. Use `session_commit` only after a session creates stable
+decisions, changed statuses, or reviewed next actions.
 
 Commit template:
 
@@ -248,3 +316,12 @@ Expected behavior:
 2. Return a concise briefing with source paths.
 3. Do not invent missing context.
 4. If the session changes facts or decisions, run `session_commit(summary)` after the task.
+
+Daily-inbox verification:
+
+1. Append a temporary item in a non-production test root or a real meaningful
+   item with `append_daily_inbox.py`.
+2. Run `daily_inbox_router.py`.
+3. Confirm routed files appear under `worklog`, `tasks`, and only the explicitly
+   named `projects/people/companies`.
+4. Run the import mirror and gbrain import for `daily-inbox` and `agent-context`.

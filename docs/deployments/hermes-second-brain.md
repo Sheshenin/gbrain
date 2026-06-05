@@ -12,6 +12,8 @@ Related documents:
   MIME/status counts, failure reasons, and implemented fixes.
 - [`../guides/agent-context-system.md`](../guides/agent-context-system.md) —
   project/person/task/session context rules for agents.
+- [`../guides/daily-inbox.md`](../guides/daily-inbox.md) — concise command
+  reference for adding and routing daily communications.
 
 ## Runtime
 
@@ -38,7 +40,17 @@ Google Drive / local mirrored files
   -> /second-brain/sources/google-drive
   -> /second-brain/texts/google-drive/*.md + *.meta.json
   -> /second-brain/gbrain-import/google-drive
-  -> gbrain import + gbrain embed --stale
+
+Daily communications / manual notes
+  -> /second-brain/texts/daily-inbox/YYYY-MM-DD.md
+  -> /second-brain/texts/agent-context/{worklog,tasks,projects,people,companies}
+
+Telegram ingestion
+  -> /second-brain/gbrain-import/telegram
+
+All import trees
+  -> gbrain import --no-embed
+  -> gbrain embed --stale
   -> shared gbrain CLI/MCP access for Hermes, OpenClaw, Codex
 ```
 
@@ -51,6 +63,8 @@ Important boundaries:
   does not replace GBrain as the document/context layer.
 - OpenViking is a reference for agent context concepts only, not a replacement
   runtime.
+- `daily-inbox` is raw input, not final memory. The nightly router writes the
+  routed agent-context layer from it.
 
 ## Nightly Pipeline
 
@@ -61,11 +75,12 @@ The worker performs:
 3. Server-side text extraction into Markdown.
 4. `.meta.json` update beside each Markdown file.
 5. Telegram ingestion.
-6. Google Drive summary generation.
-7. `gbrain-import` mirror refresh.
-8. `gbrain import ... --no-embed`.
-9. `gbrain embed --stale`.
-10. Final summary JSON and logs.
+6. Daily inbox routing into agent-context.
+7. Google Drive summary generation.
+8. `gbrain-import` mirror refresh for Google Drive, daily-inbox, and agent-context.
+9. `gbrain import ... --no-embed` for Google Drive, Telegram, daily-inbox, and agent-context.
+10. `gbrain embed --stale`.
+11. Final summary JSON and logs.
 
 Logs:
 
@@ -75,6 +90,45 @@ Logs:
 /second-brain/logs/librarian_cron_stdout.log
 /second-brain/logs/librarian_cron_stderr.log
 ```
+
+## Daily Inbox
+
+`daily-inbox` collects meaningful communications before they become durable
+context:
+
+```text
+/second-brain/texts/daily-inbox/YYYY-MM-DD.md
+```
+
+Use it for:
+
+- Zoom summaries with decisions, risks, next actions, and client/project context.
+- Telegram/email signals that look like tasks, commitments, project changes, or
+  important client/company information.
+- Andrey's standalone thoughts when he asks to add them to daily-inbox.
+
+Write into it with:
+
+```bash
+/second-brain/scripts/append_daily_inbox.py --kind thought --title "Idea" --text "..."
+printf '%s\n' "..." | /second-brain/scripts/append_daily_inbox.py --kind zoom --title "Созвон" --project "Project" --person "Person"
+printf '%s\n' "..." | /second-brain/scripts/daily_mail_review_to_inbox.py --title "Daily email review"
+```
+
+Nightly routing:
+
+```text
+/second-brain/scripts/daily_inbox_router.py
+  -> /second-brain/texts/agent-context/worklog/YYYY-MM-DD.md
+  -> /second-brain/texts/agent-context/tasks/YYYY-MM-DD.md
+  -> /second-brain/texts/agent-context/projects/<project>/YYYY-MM-DD.md
+  -> /second-brain/texts/agent-context/people/<person>/YYYY-MM-DD.md
+  -> /second-brain/texts/agent-context/companies/<company>/YYYY-MM-DD.md
+```
+
+The router is deterministic and conservative. If a project/person/company is not
+known, the item remains in the daily worklog instead of being guessed into the
+wrong context page.
 
 ## Extractors
 
@@ -129,6 +183,8 @@ Verified on 2026-06-05:
 | Real `.key` extraction | ok, `iwork:zip-preview-xml-iwa` |
 | Real `.pages` extraction | ok, `iwork:zip-preview-xml-iwa` |
 | Real `.numbers` extraction | ok, `iwork:zip-preview-xml-iwa` |
+| `daily_inbox_router.py` temporary routing test | ok, writes `worklog/tasks/projects/people/companies` |
+| Empty `daily-inbox` and `agent-context` imports | ok, `0` files without error |
 | `gbrain import /second-brain/gbrain-import/google-drive --no-embed` | ok |
 | `gbrain embed --stale` with worker env | ok, `4326/4326` chunks embedded |
 | `gbrain extract links --source db` | ok, created `0` links from current data |
@@ -191,6 +247,7 @@ resources/
 worklog/
 tasks/
 agent-context/
+daily-inbox/
 ```
 
 Write rules:
@@ -202,6 +259,8 @@ Write rules:
 - Source documents stay in `/second-brain/texts/google-drive` and the
   `gbrain-import` source pages; project pages hold summaries, decisions, links,
   and next actions.
+- Daily communications first go to `daily-inbox`; nightly routing creates
+  agent-context pages.
 
 Logical commands agents should implement through gbrain queries/writes:
 
