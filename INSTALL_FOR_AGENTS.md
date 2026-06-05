@@ -84,6 +84,35 @@ gbrain embed --stale                  # generate vector embeddings
 gbrain query "key themes across these documents?"
 ```
 
+### Hermes-hosted second-brain path
+
+If you are operating the existing Hermes second-brain deployment, do not create a
+new local brain and do not import Google Drive binaries directly. Use the
+server-side Markdown mirror documented in
+[`docs/deployments/hermes-second-brain.md`](docs/deployments/hermes-second-brain.md):
+
+```bash
+/second-brain/scripts/second_brain_librarian_worker.sh
+```
+
+The worker inventories Google Drive, downloads/exports changed files, extracts
+text into `/second-brain/texts/google-drive`, mirrors those Markdown files into
+`/second-brain/gbrain-import/google-drive`, runs `gbrain import ... --no-embed`,
+and then runs `gbrain embed --stale`.
+
+For a manual import-only refresh on Hermes:
+
+```bash
+/second-brain/scripts/make_gbrain_import_mirror.py
+gbrain import /second-brain/gbrain-import/google-drive --no-embed
+gbrain import /second-brain/gbrain-import/telegram --no-embed
+gbrain embed --stale
+```
+
+Run the manual commands with the same environment the worker uses
+(`/root/.hermes/.env` and `/root/.gbrain/.env`) so embedding provider credentials
+are available.
+
 ## Step 4.5: Wire the Knowledge Graph
 
 If the user already had a brain repo (Step 3 imported existing markdown), backfill
@@ -99,6 +128,11 @@ gbrain stats                                             # verify links > 0
 
 For brand-new empty brains, skip this step — auto-link populates the graph as the
 agent writes pages going forward. There is nothing to backfill yet.
+
+For document-mirror deployments, `links` and `timeline_entries` can legitimately
+remain at `0` after these commands if the imported Markdown contains no structured
+entity links or timeline sentinel content. Treat command success and `gbrain
+stats` as the verification signal, not `links > 0` as an unconditional invariant.
 
 After this step:
 - `gbrain graph-query <slug> --depth 2` works (relationship traversal)

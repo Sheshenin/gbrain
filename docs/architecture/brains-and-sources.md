@@ -103,6 +103,55 @@ Use this topology when:
 - You want cross-repo search to just work.
 - You don't need to share any of it with someone who isn't you.
 
+## Topology: document mirror as the source of record for import
+
+Production document deployments should separate source systems from indexed
+Markdown. Google Drive, iCloud, local folders, and other binary/document stores
+are source systems. GBrain imports the extracted Markdown mirror, not the
+original binaries.
+
+```
+┌──────────────────────────────────────────────┐
+│  external source systems                     │
+│  ├── Google Drive                            │
+│  ├── local mirrored folders                  │
+│  └── Telegram / other deterministic feeds    │
+└───────────────────────┬──────────────────────┘
+                        │ nightly read-only extraction
+                        ▼
+┌──────────────────────────────────────────────┐
+│  Markdown mirror                             │
+│  ├── texts/google-drive/*.md                 │
+│  ├── texts/google-drive/*.meta.json          │
+│  └── brain/google-drive-summaries/*.md       │
+└───────────────────────┬──────────────────────┘
+                        │ import mirror
+                        ▼
+┌──────────────────────────────────────────────┐
+│  source: google-drive                        │
+│  └── gbrain-import/google-drive/*.md         │
+└──────────────────────────────────────────────┘
+```
+
+Use this topology when:
+
+- Indexing must run on a server even if the user's laptop is off.
+- Google Drive or local files include PDFs, Office files, iWork packages, media,
+  and other non-Markdown formats.
+- You need a stable text layer with extraction metadata before import.
+- Multiple agents need the same retrieval layer.
+
+Rules:
+
+- Do not import binary originals directly.
+- Do not mutate Google Drive during indexing.
+- Keep `.meta.json` beside extracted Markdown so status, extraction method,
+  source file id, and errors are auditable.
+- Let GBrain treat the Markdown mirror/import tree as the source repo.
+
+The Hermes implementation of this topology is documented in
+[`docs/deployments/hermes-second-brain.md`](../deployments/hermes-second-brain.md).
+
 ---
 
 ## Topology: personal brain + one team brain

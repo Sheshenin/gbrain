@@ -444,6 +444,12 @@ Full guide: [docs/storage-tiering.md](docs/storage-tiering.md).
 
 GBrain ships integration recipes that your agent sets up for you. Each recipe tells the agent what credentials to ask for, how to validate, and what cron to register.
 
+For a concrete multi-agent production deployment, see
+[`docs/deployments/hermes-second-brain.md`](docs/deployments/hermes-second-brain.md).
+That runbook documents the current Hermes setup: Google Drive and local mirrors
+are extracted server-side into a Markdown mirror, GBrain indexes that mirror, and
+Hermes/OpenClaw/Codex share the same brain through CLI/SSH or MCP.
+
 | Recipe | Requires | What It Does |
 |--------|----------|-------------|
 | [Public Tunnel](recipes/ngrok-tunnel.md) | — | Fixed URL for MCP + voice (ngrok Hobby $8/mo) |

@@ -31,6 +31,13 @@ this doc is about WHERE that database lives.
   shouldn't share a code index? ─── yes ───▶ Topology 3 (split-engine)
 ```
 
+If the deployment is the Hermes shared second brain, use
+[`docs/deployments/hermes-second-brain.md`](../deployments/hermes-second-brain.md)
+as the concrete runbook. It is a server-hosted variant of Topology 2: Hermes is
+the brain host, Google Drive/local files are source systems, `/second-brain/texts`
+is the Markdown mirror, and Hermes/OpenClaw/Codex consume one shared GBrain over
+CLI/SSH or MCP.
+
 Topologies 2 and 3 stack: a thin-client install can also host per-worktree
 code engines, and a per-worktree code engine can also point its artifact
 brain at a remote server.
@@ -85,6 +92,12 @@ hosted on another machine ("brain-host") over HTTP MCP with OAuth. The
 agent's machine has NO local engine. All queries, searches, embeddings,
 and indexing happen on the host.
 
+Hermes deployment note: this topology can also use SSH/CLI as the transport
+instead of HTTP MCP. In that mode, agents run `ssh brain-host 'gbrain query ...'`
+or `ssh brain-host 'gbrain search ...'`. Indexing and embedding still happen
+only on the host; the thin client remains read/query-oriented unless explicitly
+trusted for writes.
+
 When it fits:
 
 - Heavy brain (Supabase + autopilot) lives on a beefy machine; agents
@@ -113,6 +126,10 @@ The CLI dispatch guard refuses any DB-bound command (`sync`, `embed`,
 `integrity`, `serve`) on a thin-client install with a clear error pointing
 at the remote host. `gbrain doctor` runs a dedicated thin-client check set
 (OAuth discovery, token round-trip, MCP smoke).
+
+For SSH/CLI thin clients, enforce the same rule operationally: sync/import/embed
+belong to the host's scheduled worker, not to user laptops or ephemeral agent
+worktrees.
 
 ### Setup
 
